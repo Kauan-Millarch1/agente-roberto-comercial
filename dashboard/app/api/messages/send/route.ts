@@ -38,8 +38,9 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (leadError) {
+    console.error("[api/messages/send] Lead lookup failed", { leadError });
     return NextResponse.json(
-      { error: `Lead lookup failed: ${leadError.message}` },
+      { error: "Erro ao validar lead" },
       { status: 500 }
     );
   }
@@ -56,8 +57,9 @@ export async function POST(request: NextRequest) {
     .gte("created_at", windowStart);
 
   if (countError) {
+    console.error("[api/messages/send] Rate limit check failed", { countError });
     return NextResponse.json(
-      { error: `Rate limit check failed: ${countError.message}` },
+      { error: "Erro interno" },
       { status: 500 }
     );
   }
@@ -80,8 +82,9 @@ export async function POST(request: NextRequest) {
   });
 
   if (auditError) {
+    console.error("[api/messages/send] Audit log write failed", { auditError });
     return NextResponse.json(
-      { error: `Audit log write failed: ${auditError.message}` },
+      { error: "Erro interno" },
       { status: 500 }
     );
   }
@@ -94,8 +97,9 @@ export async function POST(request: NextRequest) {
 
   if (!res.ok) {
     const text = await res.text();
+    console.error("[api/messages/send] N8N webhook failed", { status: res.status, body: text });
     return NextResponse.json(
-      { error: `N8N webhook failed: ${text}` },
+      { error: "Falha ao enviar mensagem. Tente novamente." },
       { status: 502 }
     );
   }
