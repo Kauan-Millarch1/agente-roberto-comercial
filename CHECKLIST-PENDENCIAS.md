@@ -2,18 +2,18 @@
 
 > Workflow criado: `azwM3PgGtSbGTCsn`
 > URL: https://ecommercepuro.app.n8n.cloud/workflow/azwM3PgGtSbGTCsn
-> Última atualização: 2026-03-20
+> Última atualização: 2026-03-24
 
 ---
 
 ## 🔴 BLOQUEADORES (sem isso o agente não funciona)
 
 ### 1. WhatsApp Business API — Credenciais Meta
-- [ ] Número WhatsApp Business aprovado pela Meta
-- [ ] Meta Access Token (`PLACEHOLDER_META_ACCESS_TOKEN` em 2 nodes)
+- [x] Número WhatsApp Business aprovado pela Meta ✅ (2026-03-24)
+- [x] Meta Access Token fornecido — substituir `PLACEHOLDER_META_ACCESS_TOKEN` em 2 nodes ✅ (2026-03-24)
   - Node: `upload_audio_meta` — header Authorization
   - Node: `enviar_audio_waba` — header Authorization
-- [ x ] Phone Number ID registrado no webhook do N8N
+- [x] Phone Number ID registrado no webhook do N8N ✅
 - [ ] Webhook WABA apontando para: `https://ecommercepuro.app.n8n.cloud/webhook/roberto-waba`
 - [ ] Verify Token configurado na Meta (qualquer string) + adicionar verificação no node `verificar_verificacao_waba`
 
@@ -40,59 +40,116 @@ Projeto `agente-comercial-roberto` criado (sa-east-1). Migration `create_roberto
 
 ---
 
-## 🟡 FASE 2 — ClickUp CRM (pode construir agora)
+## ⚠️ DIVERGÊNCIA DE DOCUMENTAÇÃO — Resolver com Kauan
 
-- [ ] Criar pipeline "Roberto Comercial" no ClickUp
+- [x] ~~**Conflito captação CLAUDE.md vs PRD.md:**~~ ✅ Confirmado inbound. CLAUDE.md corrigido (2026-03-24)
+
+- [x] ~~**`buscar_lead_crm` — fase conflitante:**~~ ✅ Alinhado para Fase 2. `docs/supabase.md` a corrigir.
+
+- [x] ~~**`form_custom`/`execuções`:**~~ ✅ Tabela `roberto_execucoes` criada no Supabase (2026-03-24). Nodes apontam para essa tabela.
+
+---
+
+## ~~🟡 FASE 2 — ClickUp CRM~~ ✅ CONCLUÍDA (parcial — ver ajuste pendente)
+
+- [x] Criar pipeline "Roberto Comercial" no ClickUp ✅ (2026-03-24)
   - Stages: BASE → EM CONTATO → INTERESSADO → OFERTA_ENVIADA → COMPROU / PERDIDO / SUPORTE
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — ClickUp Agente`
-- [ ] Adicionar tool `crm_roberto` no AI_Roberto (sub-node tipo toolWorkflow)
+- [x] Criar workflow N8N: `[ROBERTO] Tool — ClickUp Agente` ✅ (2026-03-24)
+- [x] Adicionar tool `crm_roberto` no AI_Roberto (sub-node tipo toolWorkflow) ✅ (2026-03-24)
 - [ ] Mapear custom fields do ClickUp (nome, email, evento_interesse, status_crm)
+- [ ] Verificar node `log_conversa_clickup` no pós-processamento (a confirmar)
 
 ---
 
-## 🟡 FASE 3 — Método Vácuo (pode construir agora)
+## 🟡 FASE 3 — Método Vácuo (parcialmente concluída)
 
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Vácuo Follow-up`
-  - Tentativa 1: 15 min após silêncio
-  - Tentativa 2: 1h
-  - Tentativa 3: 24h → marcar como PERDIDO
-- [ ] Conectar com node `cancelar_vacuo` (já existe no workflow principal — deleta chave Redis)
-- [ ] Redis key: `roberto:vacuo_pendente:{phone}`
+- [x] Copiar nodes do vácuo da Gabi e adaptar ao workflow `azwM3PgGtSbGTCsn` ✅ (2026-03-24)
+  - Nodes: `buscar_vacuo`, `vacuo_existe`, `criar_vacuo`, `resetar_vacuo`, `espera_vacuo_1/2/3`, `ler_vacuo`, `vacuo_ainda_ativo`, `verificar_limite`, `enviar_followup`, `incrementar_vacuo`, `tempo_por_tentativa`, `marcar_esgotado`
+- [ ] Adaptar mensagens de follow-up para contexto de vendas de eventos (tom: casual → urgência leve → direto) — **a verificar**
+- [x] Adicionar node `verificar_horario_vacuo` no fluxo de `enviar_followup` ✅ (incluído no refactor)
+- [x] Conectar classificador pós-agente (GPT-4.1-mini): `classificador_vacuo` → `switch_classificador` → `vacuo` ou `encerrar` ✅ (2026-03-24)
+- [x] Implementar `atualizar_crm_perdido` → UPDATE ClickUp status PERDIDO + tag `perdido` ✅ (incluído no refactor)
+- [ ] Testar escalação completa: 15min → 1h → 24h → esgotado
+- [x] Verificar que `cancelar_vacuo` é chamado antes de qualquer processamento de mensagem inbound ✅ (presente no fluxo principal)
 
 ---
 
-## 🟡 FASE 4 — Guru API (aguarda André)
+## ~~🟡 FASE 4 — API Eventos~~ ✅ PARCIALMENTE RESOLVIDA (2026-04-14)
 
-- [ ] Receber documentação da Guru API com André
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Consultar Eventos`
-  - Tool name no agent: `consultar_eventos`
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Consultar Ofertas`
-  - Tool name no agent: `consultar_ofertas`
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Verificar Cupom`
+> Admin Events API descoberta: `https://admin.ecommercepuro.com.br/api/events`
+> Auth: Bearer token (armazenado no .env)
+
+- [x] API de listagem de eventos (`GET /events`) — node `api_get_eventos_lista` já com URL + token reais ✅
+- [x] API de detalhe de evento (`GET /events/{id}?include_coupons=true`) — retorna `richDescription` (KB markdown) + `tiers[].offers[]` (preços + checkoutUrls) ✅
+- [x] `build_system_prompt` já trata `richDescription` e `tiers[].offers[]` ✅
+- [x] Node `api_get_evento_detalhe` — placeholder corrigido para URL + token reais ✅ (2026-04-14)
+- [ ] Verificar formato do preço: API retorna "15000" — é centavos (R$150) ou reais (R$15.000)?
+- [ ] Criar workflow N8N: `[ROBERTO] Tool — Verificar Cupom` (regras de cuponagem pendentes do Allage)
   - Tool name no agent: `verificar_cupom`
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Resumo Lead`
-  - Tool name no agent: `resumo_lead`
 
 ---
 
-## 🟡 FASE 5 — Webhook Pós-Venda (aguarda André)
+## 🟡 INGESTÃO DE LEADS — Webhook + Proativa (spec Will 2026-04-14)
 
-- [ ] Receber schema do webhook da Guru com André
-- [ ] Criar workflow N8N: `[ROBERTO] Webhook — Guru Pós-Venda`
-  - Recebe evento de compra
-  - Atualiza `roberto_leads.status_crm = 'COMPROU'`
-  - Envia mensagem de confirmação ao lead via WABA
+> **Spec:** `spec-lead-ingestion.md` | **Plano:** `docs/superpowers/plans/2026-04-14-lead-ingestion-webhook.md`
+> **WEBHOOK_SECRET:** armazenado no Supabase Edge Function secrets — enviar para Will
+> **Endpoint:** `https://zlwgtfdwnibaavlcqttu.supabase.co/functions/v1/ingest-lead`
+
+### Supabase
+- [x] Migration aplicada — tabela `event_leads` criada ✅ (2026-04-14)
+- [x] RLS habilitado ✅ (2026-04-14)
+- [x] Unique constraint funcionando (email + product + event_month) ✅ (2026-04-14)
+- [x] Secret `WEBHOOK_SECRET` cadastrado no Supabase ✅ (2026-04-14 — Will)
+- [x] Edge Function `ingest-lead` deployada (`--no-verify-jwt`) ✅ (2026-04-14)
+- [x] Testes curl passaram (201, 401, 409, 400) ✅ (2026-04-14)
+- [x] Phone normalizado corretamente (função `normalizePhone` na Edge Function) ✅ (2026-04-14)
+
+### N8N
+- [x] Workflow `[ROBERTO] Cron — Proactive Outreach` criado (`gtpqDeEz9FSQa7pg`) ✅ (2026-04-14)
+- [ ] Cron ativo — **ativar após testes end-to-end**
+- [x] Query filtra leads pendentes (Supabase node + Code node: 1h+ sem contato, <24h) ✅ (2026-04-14)
+- [x] Mensagem proativa via WhatsApp Business API (credential criptografada) ✅ (2026-04-14)
+- [x] Lead atualizado após envio (Supabase node: `proactive_sent_at` + `status = proactive_sent`) ✅ (2026-04-14)
+- [x] Error handling implementado (log_erro_envio + loop continua) ✅ (2026-04-14)
+
+### Integração Roberto (workflow `azwM3PgGtSbGTCsn`)
+- [x] Node `marcar_contacted_event_leads` — marca `contacted_at` quando lead envia mensagem ✅ (2026-04-14)
+- [x] Node `buscar_event_lead_dados` — busca dados do formulário ✅ (2026-04-14)
+- [x] `build_system_prompt` enriquecido com dados do formulário (empresa, faturamento, evento) ✅ (2026-04-14)
+- [x] Leads que já contataram não recebem proativa (filtro `contacted_at IS NULL` no cron) ✅ (2026-04-14)
+
+### Landing Page (depende do Will/time)
+- [ ] Webhook configurado com URL + secret
+- [ ] Payload no formato correto
+- [ ] Teste end-to-end: form → Supabase → (1h) → WhatsApp
+
+---
+
+## 🔵 FASE 5 — Pós-Venda [BACKLOG — em definição]
+
+> ⚠️ Abordagem em revisão (2026-04-14): André confirmou que será via webhook do Guru → endpoint N8N.
+> Workflow `[ROBERTO] Check_Purchase` criado com Webhook trigger (precisa trocar de GET para POST).
+> Aguardando schema do payload do Guru para montar Edit Fields + Switch.
+
+- [x] Definir fluxo pós-venda: webhook Guru → N8N ✅ (2026-04-14 — André confirmou)
+- [x] Workflow `[ROBERTO] Check_Purchase` criado no N8N ✅ (2026-04-14)
+- [ ] Aguardando schema do payload do Guru (André)
+- [ ] Após schema: implementar Edit Fields + Switch + lógica de filtragem
+- [ ] Atualizar `roberto_leads.status = 'COMPROU'`
 - [ ] Conectar com ClickUp (marcar task como COMPROU)
 
 ---
 
-## 🟡 FASE 6 — Base de Conhecimento
+## ~~🟡 FASE 6 — Base de Conhecimento~~ ✅ CONCLUÍDA (parcial)
 
-- [ ] Criar workflow N8N: `[ROBERTO] Tool — Base Roberto`
+- [x] Criar workflow N8N: `[ROBERTO] Tool — Base Roberto` ✅ (2026-03-24)
   - Tool name no agent: `base_roberto`
   - Conteúdo: speakers, diferenciais, FAQ, logística dos eventos
-- [ ] Popular base com dados reais (eventos, palestrantes, preços)
-- [ ] Script de otimização de respostas (regras de cuponagem)
+- [x] Finalizar e validar `kb-imersao-tributaria.md` com Allage ✅ (2026-03-24)
+- [x] Finalizar e validar `kb-performance-meli.md` com Allage ✅ (2026-03-24)
+- [x] Eventos ativos mapeados — foco em Imersão Tributária e Performance Meli por ora ✅
+- [x] Popular base com dados reais (eventos, palestrantes, preços) ✅ (2026-03-24)
+- [ ] Script de otimização de respostas (regras de cuponagem) — **pendente Allage**
 
 **Responsável:** Allage
 
@@ -102,14 +159,24 @@ Projeto `agente-comercial-roberto` criado (sa-east-1). Migration `create_roberto
 
 Coisas a ajustar no workflow `azwM3PgGtSbGTCsn` após resolver bloqueadores:
 
-- [ ] Node `resposta_fora_horario`: implementar verificação de horário (07h-23h GMT-3) + mensagem via WABA
-- [ ] Adicionar tratamento de erros global (error workflow `[ROBERTO] Error — Handler`)
-- [ ] Configurar `errorWorkflow` no settings do workflow principal
-- [ ] Verificar se gpt-5.1 já está disponível na conta OpenAI (pode precisar de gpt-4.1 como fallback)
+- [ ] Node `resposta_fora_horario`: verificar se a mensagem está sendo enviada via WABA (node existe no workflow, implementação a confirmar)
+- [ ] Adicionar tratamento de erros global (error workflow `[ROBERTO] Error — Handler`) — **a verificar**
+- [ ] Configurar `errorWorkflow` no settings do workflow principal — **a verificar**
+- [x] GPT-5.1 disponível na conta OpenAI ✅ (2026-03-24)
 - [ ] Testar node `openai_transcricao` — formato do áudio WABA (ogg/opus)
+- [x] **Corrigir nomes de tabelas Supabase em 29 nodes** ✅ (2026-03-24)
+- [x] ~~Credenciais Supabase~~ ✅ 31 nodes migraram de "Supabase account" (Gabi) para "Supabase Roberto" (2026-03-23)
 - [x] ~~Adicionar node de salvar mensagem de ENTRADA no Supabase~~ ✅ (2026-03-20)
 - [x] ~~Substituir NoOp handoff por notificação real~~ ✅ Handoff redesenhado com duas camadas (2026-03-20)
 - [x] ~~Tool `resumo_lead` de Data Tables para Supabase~~ ✅ (2026-03-20)
+
+---
+
+## 🔧 DOCUMENTAÇÃO — Atualizar após implementação
+
+- [x] ~~**PRD Seção 11 (Sub-workflows):** Adicionar 3 sub-workflows criados em 2026-03-20~~ ✅ (2026-03-24)
+- [x] ~~**`docs/supabase.md`:** Corrigir fase da tabela `roberto_resumos` de "Fase 6" para "Fase 1"~~ ✅ (2026-03-24)
+- [x] ~~**CHECKLIST:** Atualizar contagem de nodes (56 → 157)~~ ✅ (2026-03-24)
 
 ---
 
@@ -117,10 +184,9 @@ Coisas a ajustar no workflow `azwM3PgGtSbGTCsn` após resolver bloqueadores:
 
 | Item | De quem | Status |
 |---|---|---|
-| Guru API docs (eventos, ofertas) | André | ❌ Pendente |
-| Guru webhook schema (pós-venda) | André | ❌ Pendente |
+| ~~Guru API docs (eventos, ofertas)~~ | ~~André~~ | ✅ Resolvido — Admin Events API disponível |
+| Guru webhook schema (pós-venda) | André | ⏳ Em definição — webhook confirmado, falta schema |
 | Regras de cuponagem | Allage | ❌ Pendente |
-| Script de vendas revisado | Allage | ❌ Pendente |
 | Prazo revisado com Allage | Allage | ❌ Pendente |
 
 ---
@@ -132,7 +198,7 @@ Coisas a ajustar no workflow `azwM3PgGtSbGTCsn` após resolver bloqueadores:
 - [x] Schema Supabase documentado (`docs/supabase.md`)
 - [x] Rebrand Roberta → Roberto em todos os arquivos
 - [x] Workflow principal criado no N8N (`azwM3PgGtSbGTCsn`)
-  - 56 nodes: webhook WABA, buffer dedup Redis, AI Agent GPT-5.1, loop de envio, áudio ElevenLabs, handoff, pós-processamento Supabase
+  - ~~56 nodes~~ → **157 nodes** (após refactor + KB flow + memória em 2026-03-20): webhook WABA, buffer dedup Redis, AI Agent GPT-5.1, loop de envio, áudio ElevenLabs, handoff, pós-processamento Supabase
 - [x] Projeto Supabase `agente-comercial-roberto` criado (sa-east-1, ID: `zlwgtfdwnibaavlcqttu`)
   - 7 tabelas, triggers, indexes, seed perfis comportamentais
 - [x] ElevenLabs Voice ID configurado no node `converter_texto_audio`

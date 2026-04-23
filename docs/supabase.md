@@ -1,6 +1,6 @@
 # Supabase — Agente Roberto (Comercial)
 
-> Todas as tabelas usam o prefixo `roberto_` para isolamento total no projeto Ecommerce Puro.
+> Todas as tabelas `roberto_*` usam prefixo para isolamento. Tabelas compartilhadas (ex: `event_leads`) não usam prefixo.
 > A instância Supabase é a mesma usada pela Gabi — apenas as tabelas são separadas.
 
 ---
@@ -14,8 +14,10 @@
 | `roberto_custos` | Custo por execução (OpenAI + ElevenLabs) | Fase 1 |
 | `roberto_metricas` | Métricas diárias do agente | Fase 1 |
 | `roberto_perfis_stats` | Analytics de perfis comportamentais | Fase 1 |
+| `roberto_resumos` | Resumos de conversa (tool `resumo_lead`) | Fase 1 *(implementada em 2026-03-20)* |
 | `roberto_vacuo` | Estado do método de follow-up automático | Fase 2 |
-| `roberto_resumos` | Resumos de conversa (tool `resumo_lead`) | Fase 6 |
+| `roberto_execucoes` | Log de execuções do agente (equivalente ao `form_custom`/`execuções` da Gabi) | Fase 2 *(criada em 2026-03-24)* |
+| `event_leads` | Leads de formulários de eventos (webhook) — sem prefixo, multi-agente | Lead Ingestion *(criada em 2026-04-14)* |
 
 ---
 
@@ -292,6 +294,92 @@ CREATE TABLE roberto_resumos (
 **Nodes N8N que usam essa tabela:**
 - Tool `resumo_lead` — SELECT WHERE telefone ORDER BY created_at DESC LIMIT 3
 - Node pós-sessão — INSERT ao final de cada sessão de conversa
+
+---
+
+### `roberto_descontos`
+
+Runtime discount table for Negociação Agent (Paperclip integration). Used by N8N to compare lead-requested prices against allowed maximums.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `evento_nome` | TEXT | PK | Event name (e.g., "Imersão Tributária") |
+| `preco_cheio` | NUMERIC | NOT NULL | Full event price |
+| `nivel_1` | NUMERIC | nullable | First discount tier (only for R$ 7.500 events) |
+| `nivel_2` | NUMERIC | nullable | Second discount tier (only for R$ 7.500 events) |
+| `maximo_desconto` | NUMERIC | NOT NULL | Maximum allowed discount price |
+| `formas_pagamento` | TEXT[] | NOT NULL, default ['PIX','6x'] | Accepted payment methods |
+
+---
+
+### `event_leads`
+
+Leads capturados via webhook de landing pages/Typeform. Sem prefixo `roberto_` pois serve múltiplos agentes. Spec: `spec-lead-ingestion.md` (Will Pagane, 2026-04-14).
+
+```sql
+CREATE TABLE event_leads (
+  id                    UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  product               TEXT        NOT NULL,  -- Nome do evento (ex: "Performance Shopee")
+  email                 TEXT        NOT NULL,
+  full_name             TEXT        NOT NULL,
+  company_name          TEXT,
+  role                  TEXT,
+  phone                 TEXT        NOT NULL,  -- Normalizado: +5541999999999
+  utm_source            TEXT,
+  utm_medium            TEXT,
+  utm_campaign          TEXT,
+  utm_content           TEXT,
+  utm_term              TEXT,
+  company_state         TEXT,
+  monthly_revenue       TEXT,
+  knowledge_investment  TEXT,
+  tax_regime            TEXT,
+  form_submitted_at     TIMESTAMPTZ,
+  event_month           DATE        NOT NULL,  -- Primeiro dia do mês (ex: 2026-04-01)
+  contacted_at          TIMESTAMPTZ,           -- Preenchido quando lead envia msg pro Roberto
+  proactive_sent_at     TIMESTAMPTZ,           -- Preenchido quando cron envia proativa
+  status                TEXT        NOT NULL DEFAULT 'new'
+                                    CHECK (status IN ('new', 'contacted', 'proactive_sent')),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Dedup: mesmo email + produto + mês = duplicata
+ALTER TABLE event_leads
+  ADD CONSTRAINT unq_event_leads_email_product_month
+  UNIQUE (email, product, event_month);
+
+-- Index parcial para o cron de proactive outreach
+CREATE INDEX idx_event_leads_proactive_pending
+  ON event_leads (form_submitted_at)
+  WHERE contacted_at IS NULL
+    AND proactive_sent_at IS NULL
+    AND status = 'new';
+
+-- RLS habilitado, sem policies = bloqueia anon/authenticated
+-- service_role (Edge Function + N8N) bypassa RLS automaticamente
+ALTER TABLE event_leads ENABLE ROW LEVEL SECURITY;
+```
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `product` | TEXT | Nome do evento/produto (ex: "Performance Shopee") |
+| `email` | TEXT | Email do lead (salvo em lowercase) |
+| `full_name` | TEXT | Nome completo |
+| `phone` | TEXT | Telefone normalizado (`+5541999999999`) |
+| `event_month` | DATE | Primeiro dia do mês do `form_submitted_at` — usado na unique constraint |
+| `contacted_at` | TIMESTAMPTZ | Quando o lead enviou a primeira mensagem ao Roberto |
+| `proactive_sent_at` | TIMESTAMPTZ | Quando o cron enviou mensagem proativa |
+| `status` | TEXT | `new` → `proactive_sent` (cron enviou) ou `contacted` (lead falou) |
+| UTMs | TEXT | `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` |
+| Dados empresa | TEXT | `company_name`, `company_state`, `monthly_revenue`, `knowledge_investment`, `tax_regime` |
+
+**Ingestão:** Edge Function `ingest-lead` (Supabase) — recebe POST com `X-Webhook-Secret`, valida, normaliza phone, insere.
+
+**Nodes N8N que usam essa tabela:**
+- `marcar_contacted_event_leads` — UPDATE `contacted_at` + `status='contacted'` (workflow principal)
+- `buscar_event_lead_dados` — SELECT dados do formulário para enriquecer contexto (workflow principal)
+- `buscar_leads_pendentes` — SELECT leads com 1h+ sem contato (workflow cron `gtpqDeEz9FSQa7pg`)
+- `atualizar_lead_proativa` — UPDATE `proactive_sent_at` + `status='proactive_sent'` (workflow cron)
 
 ---
 

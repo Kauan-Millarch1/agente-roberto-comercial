@@ -2,7 +2,7 @@
 type: reference
 name: "KB Evento — Imersão Tributária"
 project: "[[Agente Roberto (Comercial)]]"
-event_status: draft
+event_status: validated
 created: 2026-03-20
 last_updated: 2026-03-20
 tags:

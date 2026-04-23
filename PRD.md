@@ -59,12 +59,25 @@ verificar_horario (07h–23h GMT-3?)
 parametros (phone, nome, mensagem, tipo_midia)
          │
          ▼
+filtragem_grupo → verificacao_numero
+         │
+         ▼
+verificar_lead_supabase
+(SELECT * FROM roberto_leads WHERE telefone = :phone)
+         │
+   ┌─────┴──────────────────────────┐
+   MISS (1º contato)                 HIT (lead existente)
+   │                                 │
+salvar_lead_supabase                  carregar_dados_lead
+(INSERT roberto_leads:                (dados do SELECT)
+ telefone, nome, status=BASE)
+   │                                 │
+   └─────────────┬───────────────────┘
+                 │
+                 ▼
 cancelar_vacuo (Supabase UPDATE — segurança contra race condition)
-         │
-         ▼
-filtragem_grupo → verificacao_numero → buscar_lead_crm
-         │
-         ▼
+                 │
+                 ▼
 switch_tipo_midia:
   ├── Texto  → direto
   ├── Áudio  → openai_transcricao (Whisper)
@@ -327,7 +340,7 @@ resposta_fora_horario      — enviar_mensagem_waba (msg automática)
 
 ## 7. Handoff — Suporte Técnico e Pós-Venda
 
-**Gatilho:** Campo `acionar_handoff: true` no output da `AI_Roberto`.
+**Gatilho:** A `AI_Roberto` chama a tool `handoff_humano` diretamente quando detecta necessidade de transferência. O campo `acionar_handoff: true` no output estruturado serve como sinal de confirmação (safety net).
 
 **Situações que acionam handoff:**
 - Questões sobre nota fiscal, reembolso, cancelamento
@@ -335,34 +348,48 @@ resposta_fora_horario      — enviar_mensagem_waba (msg automática)
 - Reclamações pós-venda
 - Situações técnicas que a Roberto não consegue resolver
 
-### 7.1 Fluxo Handoff
+### 7.1 Arquitetura: Tool-Based Handoff
+
+O handoff é implementado como uma **tool do AI Agent**, seguindo o mesmo padrão de `buscar_evento`, `salvar_resumo` e `agendar_call_closer`.
 
 ```
-acionar_handoff = true
+AI_Roberto detecta necessidade de handoff
          │
          ▼
-switch_handoff
+chama tool: handoff_humano
+  (passa: phone, motivo)
          │
-         ▼
-notificar_equipe_handoff
-  — UPDATE ClickUp: status → SUPORTE, tag → "handoff"
+         ▼  [ROBERTO] Tool — Handoff Humano  (workflow: fQYwWc7FBzzQavAE)
          │
-         ▼
-mensagem_handoff_lead
-  — "Vou te conectar com nossa equipe agora!"
+         ├── buscar_task_clickup
+         │     — GET tasks WHERE custom_field = phone
          │
-         ▼
-atualizar_lead_handoff
-  — UPDATE roberto_leads: status = 'HANDOFF'
+         ├── notificar_equipe_handoff
+         │     — ADD tag "handoff" na task ClickUp
+         │
+         ├── mensagem_handoff_lead
+         │     — enviar_mensagem_waba: "Vou te conectar com nossa equipe agora!"
+         │
+         └── atualizar_lead_handoff
+               — UPDATE roberto_leads: status = 'HANDOFF'
 ```
 
-**Nodes:**
+**Subworkflow:** `[ROBERTO] Tool — Handoff Humano` | ID: `fQYwWc7FBzzQavAE`
+
+**Inputs esperados (passados pela AI):**
+- `phone` — número do lead (disponível no contexto técnico do system prompt)
+- `motivo` — `"pedido_lead"` ou `"suporte_tecnico"`
+
+**Nodes do subworkflow:**
 ```
-switch_handoff             — IF acionar_handoff = true?
-notificar_equipe_handoff   — UPDATE ClickUp (status SUPORTE + tag handoff)
-mensagem_handoff_lead      — enviar_mensagem_waba
+trigger_handoff            — Execute Workflow Trigger (recebe phone + motivo)
+buscar_task_clickup        — GET ClickUp tasks WHERE phone custom field match
+notificar_equipe_handoff   — ADD tag "handoff" na task ClickUp
+mensagem_handoff_lead      — enviar_mensagem_waba (aviso ao lead)
 atualizar_lead_handoff     — UPDATE roberto_leads status='HANDOFF'
 ```
+
+> ⚠️ **Safety net:** os nodes inline `switch_handoff` → `notificar_equipe_handoff` → `mensagem_handoff_lead` → `atualizar_lead_handoff` permanecem no fluxo principal como fallback. Serão removidos após validação.
 
 ---
 
@@ -390,7 +417,7 @@ atualizar_lead_handoff     — UPDATE roberto_leads status='HANDOFF'
 |---|---|
 | `intencao_detectada` | `interesse_alto` · `interesse_medio` · `objecao` · `comprou` · `desistiu` · `duvida` |
 | `status_crm` | `EM CONTATO` · `INTERESSADO` · `OFERTA_ENVIADA` · `COMPROU` · `PERDIDO` · `HANDOFF` |
-| `objecao_detectada` | `preco` · `tempo` · `relevancia` · `concorrencia` · `nenhuma` · `outra` |
+| `objecao_detectada` | `preco` · `tempo` · `relevancia` · `palestrantes` · `localizacao` · `nenhuma` · `outra` |
 
 ---
 
@@ -500,11 +527,16 @@ BASE → EM CONTATO → INTERESSADO → OFERTA_ENVIADA → COMPROU
 
 ## 11. Sub-workflows
 
-| Workflow | Nome no N8N | Propósito |
-|---|---|---|
-| CRM tool | `[ROBERTO] Tool — ClickUp Agente` | Atualizar custom fields (copiar `d6j0bzfZwVJeCnMF`) |
-| Guru API | `[ROBERTO] Tool — Consultar Guru` | Buscar eventos ativos + ofertas |
-| Pós-venda | `[ROBERTO] Webhook — Confirmação Venda Guru` | Receber confirmação de venda |
+| Workflow | Nome no N8N | ID | Propósito |
+|---|---|---|---|
+| CRM tool | `[ROBERTO] Tool — ClickUp Agente` | — | Atualizar custom fields (copiar `d6j0bzfZwVJeCnMF`) |
+| Guru API | `[ROBERTO] Tool — Consultar Guru` | — | Buscar eventos ativos + ofertas |
+| Pós-venda | `[ROBERTO] Webhook — Confirmação Venda Guru` | — | Receber confirmação de venda |
+| KB evento | `[ROBERTO] Tool — Buscar Evento` | `vnbtZQMsUl76h5p1` | Buscar detalhes de evento específico via API admin (cache Redis 1h) |
+| Resumo conversa | `[ROBERTO] Tool — Salvar Resumo` | `tgS9ji09wpuIeoJw` | Salvar resumo da sessão no Redis (TTL 48h) |
+| Closer | `[ROBERTO] Tool — Agendar Call Closer` | `F4LDmaSDWxarb9AV` | Montar briefing de lead para handoff ao closer humano |
+
+> ℹ️ Sub-workflows `Buscar Evento`, `Salvar Resumo` e `Agendar Call Closer` foram implementados em 2026-03-20 como parte do Knowledge Base Flow e Memória Persistente.
 
 ---
 

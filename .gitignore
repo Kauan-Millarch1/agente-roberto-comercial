@@ -24,3 +24,25 @@ node_modules/
 __pycache__/
 *.pyc
 .venv/
+
+# Claude Code internal (agents, skills, plugin cache) — personal workflow metadata
+.claude/
+
+# Next.js build artifacts
+.next/
+dashboard/.next/
+
+# Planning and internal docs
+.planning/
+
+# N8N workflow exports — often contain credentials
+workflow-*.json
+*-workflow-backup.json
+*_workflow_backup.json
+scripts/*workflow*.json
+scripts/*backup*.json
+
+# Defensive: any file matching common secret patterns
+**/secrets.*
+**/*_secret.*
+**/credentials.json

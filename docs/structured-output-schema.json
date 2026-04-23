@@ -1,0 +1,103 @@
+{
+  "type": "object",
+  "properties": {
+    "messages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Array de bolhas WhatsApp. Se acionar_audio=true, conteúdo completo falado. Se false, max 2 bolhas ~80 chars."
+    },
+    "intencao_detectada": {
+      "type": "string",
+      "enum": [
+        "interesse_alto",
+        "interesse_medio",
+        "objecao",
+        "comprou",
+        "desistiu",
+        "duvida"
+      ]
+    },
+    "evento_interesse": {
+      "type": "string",
+      "description": "Nome do evento que o lead demonstrou interesse. Vazio se não identificado."
+    },
+    "lead_qualificado": {
+      "type": "boolean"
+    },
+    "ativar_oferta": {
+      "type": "boolean",
+      "description": "true quando lead pergunta preço/link, confirma interesse, ou técnica de fechamento."
+    },
+    "oferta_enviada": {
+      "type": "boolean",
+      "description": "true após enviar link de pagamento ao lead."
+    },
+    "acionar_audio": {
+      "type": "boolean",
+      "description": "true para perguntas sobre evento, objeções, apresentações. false para saudações e perguntas curtas. DEFAULT É AUDIO — na dúvida, true."
+    },
+    "acionar_handoff": {
+      "type": "boolean",
+      "description": "true quando lead pede humano, ou assunto fora do escopo de vendas (reembolso, problemas técnicos)."
+    },
+    "objecao_detectada": {
+      "type": "string",
+      "enum": [
+        "preco",
+        "tempo",
+        "relevancia",
+        "palestrantes",
+        "localizacao",
+        "nenhuma",
+        "outra"
+      ]
+    },
+    "preco_negociado": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "Valor negociado se houve desconto. null se não aplicável."
+    },
+    "preco_solicitado_lead": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "Preço que o LEAD explicitamente solicitou (ex: 'faz por 3k?'). Valor numérico apenas (ex: '3000'). null se não propôs preço. Resetar para null após fluxo de aprovação completar."
+    },
+    "argumentos_usados": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Array cumulativo de identificadores de argumentos usados na conversa. Padrão: {tipo_objecao}_{nivel}. Ex: 'preco_roi_reframe', 'preco_exemplo_concreto', 'preco_loss_frame', 'relevancia_conexao_contexto', 'historia_pessoal', 'phantom_anchor'. Persistir via salvar_resumo."
+    },
+    "status_crm": {
+      "type": "string",
+      "enum": [
+        "EM CONTATO",
+        "INTERESSADO",
+        "OFERTA_ENVIADA",
+        "COMPROU",
+        "PERDIDO",
+        "HANDOFF"
+      ]
+    },
+    "dados_lead": {
+      "type": "object",
+      "properties": {
+        "nome": {
+          "oneOf": [{ "type": "string" }, { "type": "null" }]
+        },
+        "email": {
+          "oneOf": [{ "type": "string" }, { "type": "null" }]
+        }
+      }
+    }
+  },
+  "required": [
+    "messages",
+    "intencao_detectada",
+    "lead_qualificado",
+    "ativar_oferta",
+    "oferta_enviada",
+    "acionar_audio",
+    "acionar_handoff",
+    "objecao_detectada",
+    "status_crm",
+    "dados_lead"
+  ]
+}
