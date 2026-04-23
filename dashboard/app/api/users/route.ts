@@ -27,13 +27,13 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
-  const { authorized, role: actorRole, response } = await requireRole("admin");
-  if (!authorized) return response;
+  const { authorized, userId, role: actorRole, response } = await requireRole("admin");
+  if (!authorized || !userId) return response;
 
   const body = await request.json();
-  const { userId, role: newRole } = body;
+  const { userId: targetUserId, role: newRole } = body;
 
-  if (!userId || !newRole) {
+  if (!targetUserId || !newRole) {
     return NextResponse.json(
       { error: "userId and role are required" },
       { status: 400 }
@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest) {
   const { data: target } = await supabase
     .from("dashboard_users")
     .select("role")
-    .eq("id", userId)
+    .eq("id", targetUserId)
     .single();
 
   if (!target) {
@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest) {
   const { data, error } = await supabase
     .from("dashboard_users")
     .update({ role: newRole })
-    .eq("id", userId)
+    .eq("id", targetUserId)
     .select()
     .single();
 
@@ -92,6 +92,20 @@ export async function PATCH(request: NextRequest) {
       { error: "Erro ao atualizar usuário" },
       { status: 500 }
     );
+  }
+
+  const { error: auditError } = await supabase.from("roberto_audit_log").insert({
+    user_id: userId,
+    action: "update_user_role",
+    metadata: {
+      target_user_id: targetUserId,
+      old_role: target.role,
+      new_role: newRole,
+    },
+  });
+
+  if (auditError) {
+    console.error("[api/users PATCH] audit write failed", { error: auditError });
   }
 
   return NextResponse.json(data);

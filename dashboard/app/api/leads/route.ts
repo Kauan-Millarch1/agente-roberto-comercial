@@ -5,8 +5,8 @@ import { requireRole } from "@/lib/api-auth";
 export const dynamic = "force-dynamic";
 
 export async function PATCH(request: NextRequest) {
-  const { authorized, response } = await requireRole("operator");
-  if (!authorized) return response;
+  const { authorized, userId, response } = await requireRole("operator");
+  if (!authorized || !userId) return response;
 
   const body = await request.json();
   const { phone, human_takeover, operator, status } = body;
@@ -74,6 +74,17 @@ export async function PATCH(request: NextRequest) {
       .update({ status: "cancelado" })
       .eq("phone", phone)
       .eq("status", "ativo");
+  }
+
+  const { error: auditError } = await supabase.from("roberto_audit_log").insert({
+    user_id: userId,
+    action: "update_lead",
+    phone,
+    metadata: updateData,
+  });
+
+  if (auditError) {
+    console.error("[api/leads PATCH] audit write failed", { error: auditError });
   }
 
   return NextResponse.json(data);
