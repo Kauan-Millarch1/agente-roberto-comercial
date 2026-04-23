@@ -51,13 +51,21 @@ export async function GET(request: Request) {
   // Fetch or create dashboard_users record and get role
   const role = await getUserRole(user.id, user.email!, user.user_metadata);
 
-  // Set role cookie for client-side access
+  // UI-ONLY COOKIE — do NOT use for authorization decisions.
+  //
+  // This cookie is readable by client JS (httpOnly: false) so <RoleGate> can
+  // toggle UI elements without a round-trip. It is falsifiable — any logged-in
+  // user can overwrite it via `document.cookie`. All authorization is enforced
+  // server-side by `requireRole()` reading from `dashboard_users`.
+  //
+  // Short maxAge (10min) keeps the UI in sync shortly after a role change in
+  // the DB; the server-side check is always authoritative.
   cookieStore.set("x-user-role", role, {
     path: "/",
-    httpOnly: false, // Readable by client JS for RoleGate
+    httpOnly: false,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 600,
   });
 
   return NextResponse.redirect(`${origin}/`);
