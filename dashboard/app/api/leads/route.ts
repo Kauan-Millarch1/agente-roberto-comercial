@@ -60,7 +60,11 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/leads PATCH] update failed", { error });
+    return NextResponse.json(
+      { error: "Erro ao atualizar lead" },
+      { status: 500 }
+    );
   }
 
   // Cancel active vacuums when human takes over

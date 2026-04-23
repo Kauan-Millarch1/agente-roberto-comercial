@@ -16,7 +16,11 @@ export async function GET() {
     .order("created_at", { ascending: true });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/users GET] list failed", { error });
+    return NextResponse.json(
+      { error: "Erro ao buscar usuários" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json(data ?? []);
@@ -83,7 +87,11 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[api/users PATCH] update failed", { error });
+    return NextResponse.json(
+      { error: "Erro ao atualizar usuário" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json(data);
