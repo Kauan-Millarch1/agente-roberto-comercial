@@ -77,6 +77,7 @@ const resolveAuthenticatedRole = cache(
 export async function requireRole(minRole: Role): Promise<{
   authorized: boolean;
   role: Role;
+  userId?: string;
   response?: NextResponse;
 }> {
   let auth = await resolveAuthenticatedRole();
@@ -133,5 +134,5 @@ export async function requireRole(minRole: Role): Promise<{
     };
   }
 
-  return { authorized: true, role: auth.role };
+  return { authorized: true, role: auth.role, userId: auth.userId };
 }
