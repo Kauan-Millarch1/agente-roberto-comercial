@@ -76,6 +76,9 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function GET() {
+  const { authorized, response } = await requireRole("viewer");
+  if (!authorized) return response;
+
   const supabase = createServiceClient();
 
   const [leadsResult, eventLeadsResult, messagesResult] = await Promise.all([

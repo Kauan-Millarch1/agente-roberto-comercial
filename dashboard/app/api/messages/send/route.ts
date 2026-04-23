@@ -1,8 +1,12 @@
 import { NextResponse, NextRequest } from "next/server";
+import { requireRole } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const { authorized, response } = await requireRole("operator");
+  if (!authorized) return response;
+
   const { phone, content } = await request.json();
 
   if (!phone || !content) {

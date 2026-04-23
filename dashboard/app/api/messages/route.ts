@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase-server";
+import { requireRole } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const { authorized, response } = await requireRole("viewer");
+  if (!authorized) return response;
+
   const { searchParams } = new URL(request.url);
   const phone = searchParams.get("phone");
 
